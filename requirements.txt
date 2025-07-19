@@ -1,0 +1,6 @@
+python-telegram-bot==21.1
+requests
+python-dotenv
+pytz
+python-dateutil
+rich
