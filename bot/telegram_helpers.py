@@ -18,15 +18,28 @@ def format_games_for_telegram(games):
         message += f"🔗 [Join]({g['link']})\n\n"
     return message
 
+
 async def send_welcome_message(update: Update, context):
     new_members = update.message.new_chat_members
     for member in new_members:
         name = member.full_name
-        rules = (
+
+        message = (
             f"👋 Welcome, *{name}*!\n\n"
             "📌 *Group Rules:*\n"
             "1. Be respectful 🌟\n"
             "2. Only football-related content ⚽\n"
-            "3. No spam or self-promotion 🚫\n"
+            "3. No spam or self-promotion 🚫\n\n"
+            "➖➖➖\n"
+            "🛠️ _Note: This bot runs on free cloud hosting (Render). If it glitches once in a while, please wink and forgive 😅_\n\n"
+            "☕ _Like the bot? Treat the dev to a coffee!_\n"
+            "[Buy me a coffee](https://buymeacoffee.com/talkanoop8y?new=1) 🙌"
         )
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=rules, parse_mode=ParseMode.MARKDOWN)
+
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=message,
+            parse_mode=ParseMode.MARKDOWN,
+            disable_web_page_preview=True,
+        )
+
