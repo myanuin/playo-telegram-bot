@@ -1,79 +1,108 @@
 import os
-import pytz
+import logging
 import datetime
-from datetime import timedelta, time as dtime
-from dotenv import load_dotenv
-
+import pytz
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
     MessageHandler,
-    filters
+    CommandHandler,
+    filters,
 )
+from dotenv import load_dotenv
 
 from bot.finder import fetch_football_games
-from bot.telegram_helpers import (
-    send_welcome_message,
-    format_games_for_telegram
-)
+from bot.telegram_helpers import send_welcome_message, format_games_for_telegram
 
-# Load environment variables from .env
+# ----------------------------
+# ENV Setup
+# ----------------------------
 load_dotenv()
 
-# Load variables
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TIMEZONE = os.getenv("TIMEZONE", "Asia/Kolkata")
+LAT = float(os.getenv("LAT", "12.935207"))
+LNG = float(os.getenv("LNG", "77.710709"))
+RADIUS = int(os.getenv("RADIUS", 50))
+SPORT = os.getenv("SPORT", "SP2")
+
 CONFIG = {
-    "lat": float(os.getenv("LAT", 12.935207)),
-    "lng": float(os.getenv("LNG", 77.710709)),
-    "radius": int(os.getenv("RADIUS", 50)),
-    "sport": os.getenv("SPORT", "SP2"),
-    "timezone": os.getenv("TIMEZONE", "Asia/Kolkata"),
+    "lat": LAT,
+    "lng": LNG,
+    "radius": RADIUS,
+    "sport": SPORT,
+    "timezone": TIMEZONE,
 }
 
 # ----------------------------
-# Function: Fetch & send Playo data
+# Logging Setup for Render Logs
 # ----------------------------
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+# ----------------------------
+# Handlers
+# ----------------------------
+
 async def daily_playo_update(context: ContextTypes.DEFAULT_TYPE):
-    print("📡 Running daily Playo update...")
-    games = fetch_football_games(CONFIG)
-    print(f"🎯 Fetched {len(games)} games")
+    logger.info("📡 Running daily Playo update job...")
+    try:
+        games = fetch_football_games(CONFIG)
+        message = format_games_for_telegram(games)
 
-    message = format_games_for_telegram(games)
-    if not message.strip():
-        message = "⚽ No football games found today between 6PM and 10PM."
+        if not message.strip():
+            message = "⚽ No football games found today between 6PM and 10PM."
 
-    await context.bot.send_message(
-        chat_id=TELEGRAM_CHAT_ID,
-        text=message,
-        parse_mode="Markdown"
-    )
-    print("✅ Game update sent to Telegram group.")
+        await context.bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID,
+            text=message,
+            parse_mode="Markdown",
+        )
+        logger.info("✅ Daily message sent successfully.")
+
+    except Exception as e:
+        logger.error(f"❌ Error during daily update: {e}", exc_info=True)
+
+
+async def test_command(update, context):
+    await update.message.reply_text("✅ Bot is alive and ready!")
 
 # ----------------------------
-# Main
+# Main App
 # ----------------------------
 if __name__ == "__main__":
-    print("🚀 Starting Telegram Bot...")
+    logger.info("🚀 Starting Telegram Bot...")
 
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    try:
+        app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Handle new member join
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, send_welcome_message))
+        # 1. Handle new users
+        app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, send_welcome_message))
 
-    # Get IST time and current now
-    ist = pytz.timezone(CONFIG["timezone"])
-    now = datetime.datetime.now(ist)
-    print("🕒 Current time:", now.strftime("%A, %B %d, %Y, %I:%M %p %Z"))
+        # 2. Optional test command
+        app.add_handler(CommandHandler("test", test_command))
 
-    # Schedule daily job at 5:30 PM IST
-    send_time = dtime(17, 30, tzinfo=ist)
-    app.job_queue.run_daily(daily_playo_update, send_time)
-    print("📅 Scheduled job for 5:30 PM IST daily.")
+        # 3. Setup daily job
+        from datetime import time as dtime, timedelta
 
-    # Test: Run once after 5 seconds (instant test!)
-    app.job_queue.run_once(daily_playo_update, when=timedelta(seconds=5))
-    print("🧪 Test job scheduled to run in 5 seconds.")
+        ist = pytz.timezone(TIMEZONE)
+        send_time = dtime(17, 30, tzinfo=ist)
+        now = datetime.datetime.now(ist)
+        logger.info("🕒 Current time: %s", now.strftime("%A, %B %d, %Y, %I:%M %p %Z"))
+        logger.info("📅 Scheduling job for 5:30 PM IST daily...")
+        app.job_queue.run_daily(daily_playo_update, send_time)
 
-    print("🤖 Bot is running... Waiting for events.")
-    app.run_polling()
+        # 4. Test trigger within 10 seconds
+        app.job_queue.run_once(daily_playo_update, when=timedelta(seconds=10))
+        logger.info("🧪 One-time test message will send in 10 seconds.")
+
+        # 5. Start polling
+        logger.info("🤖 Bot is now polling...")
+        app.run_polling()
+
+    except Exception as e:
+        logger.critical("😵 FATAL ERROR: Bot crashed on startup!", exc_info=True)
