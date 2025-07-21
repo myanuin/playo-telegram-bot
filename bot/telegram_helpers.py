@@ -2,6 +2,7 @@ import logging
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,20 @@ async def send_welcome_message(update: Update, context: ContextTypes.DEFAULT_TYP
 # ⚽ PLAYO MATCH FORMATTER
 # ----------------------------------------
 
+from datetime import datetime
+
 def format_games_for_telegram(games: list) -> str:
     if not games:
         return "😴 No football matches found today between 6PM and 10PM!"
+
+    # --- Generate Pretty Title ---
+    now = datetime.now()
+    date_str = now.strftime('%A, %B %d, %Y — %I:%M %p IST')
+    title = (
+        "🏟️ *Available Football Matches Today*\n"
+        "🕖 Between *6:00 PM and 10:00 PM*\n"
+        f"🗓️ *{date_str}*\n"
+    )
 
     messages = []
 
@@ -70,7 +82,6 @@ def format_games_for_telegram(games: list) -> str:
         link = game.get("link", "").strip()
         distance = game.get("distance", None)
 
-        # Skip full games
         try:
             current, total = map(int, players.split("/"))
             if total <= 0 or current >= total:
@@ -80,35 +91,33 @@ def format_games_for_telegram(games: list) -> str:
 
         lines = []
 
-        # Match title with numbering and optional venue
         if venue:
             lines.append(f"{i}. 🏟️ *{venue}*")
         else:
             lines.append(f"{i}.")
 
-        # Add start–end time
         if start and end:
             lines.append(f"🕔 {start} – {end}")
 
-        # Players
         lines.append(f"👥 {players}")
 
-        # Host
         if host:
             lines.append(f"👤 Host: {host}")
 
-        # Distance
         if distance:
             lines.append(f"📍 {round(distance, 1)} km away")
 
-        # Link
         if link:
             lines.append(f"[👉 Join Match]({link})")
 
-        match_block = "\n".join(lines)
-        messages.append(match_block)
+        messages.append("\n".join(lines))
 
     if not messages:
-        return "😔 No open football matches found today between 6PM and 10PM."
+        return (
+            "🏟️ *Available Football Matches Today*\n"
+            "🕖 Between *6:00 PM and 10:00 PM*\n"
+            f"🗓️ *{date_str}*\n\n"
+            "😴 No open football matches found today."
+        )
 
-    return "\n\n".join(messages)
+    return f"{title}\n\n" + "\n\n".join(messages)
