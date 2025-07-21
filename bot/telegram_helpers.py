@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------
-# 👋 WELCOME MESSAGE
+# 👋 WELCOME MESSAGE HANDLER
 # ----------------------------------------
 
 async def send_welcome_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -14,7 +14,8 @@ async def send_welcome_message(update: Update, context: ContextTypes.DEFAULT_TYP
     chat_id = update.effective_chat.id if update.effective_chat else None
 
     for member in new_members:
-        name = getattr(member, "full_name", None) or getattr(member, "name", None) or "friend"
+        # Fallback to a generic name if user info is missing or incomplete
+        name = getattr(member, "full_name", "") or getattr(member, "name", "") or "friend"
 
         welcome_text = (
             f"👋 Welcome, *{name}*!\n\n"
@@ -25,38 +26,33 @@ async def send_welcome_message(update: Update, context: ContextTypes.DEFAULT_TYP
             "➖➖➖\n"
             "🤖 This bot runs on free cloud ☁️\n"
             "😴 If no matches show up, it’s not the bot’s fault — Playo’s just quiet.\n"
-            "☕ Want more consistency? [Buy me a coffee](https://buymeacoffee.com/talkanoop8y)!"
+            "☕ Want more consistency? [Buy me a coffee](https://buymeacoffee.com/talkanoop8y/how-bot-working-far)!"
         )
 
         try:
-            logger.info(f"➡️ Sending welcome to '{name}' (id={getattr(member, 'id', 'N/A')}) in chat {chat_id}.")
+            logger.info(f"➡️ Sending welcome message to '{name}' in chat {chat_id}...")
             sent = await context.bot.send_message(
                 chat_id=chat_id,
                 text=welcome_text,
                 parse_mode=ParseMode.MARKDOWN,
                 disable_web_page_preview=True
             )
-            logger.info(f"✅ Welcome sent to '{name}' (message_id={sent.message_id}).")
+            logger.info(f"✅ Welcome message sent to '{name}' (message_id={sent.message_id})")
         except Exception as e:
-            logger.error(f"❌ Failed to welcome '{name}' (id={getattr(member, 'id', 'N/A')}): {e}", exc_info=True)
-
-            # Fallback to basic message
+            logger.error(f"❌ Failed to send welcome to '{name}': {e}", exc_info=True)
             try:
-                fallback = (
-                    f"❗ Sorry *{name}*, we had a hiccup while sending your welcome.\n"
-                    "Have a look at the group rules above and enjoy your stay!"
-                )
+                fallback = f"👋 Welcome, *{name}*! Please check the group rules above 😊"
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=fallback,
                     parse_mode=ParseMode.MARKDOWN
                 )
-                logger.info(f"🔁 Fallback welcome sent to '{name}'.")
-            except Exception as fallback_exc:
-                logger.error(f"💥 Double-failure welcoming '{name}': {fallback_exc}", exc_info=True)
+                logger.info(f"🔁 Sent fallback welcome to '{name}'.")
+            except Exception as fallback_e:
+                logger.error(f"❌ Failed to send fallback welcome to '{name}': {fallback_e}", exc_info=True)
 
 # ----------------------------------------
-# ⚽ FORMAT PLAYO GAMES
+# ⚽ PLAYO MATCH FORMATTER
 # ----------------------------------------
 
 def format_games_for_telegram(games: list) -> str:
@@ -65,34 +61,52 @@ def format_games_for_telegram(games: list) -> str:
 
     messages = []
 
-    for game in games:
-        # Safe read with fallback
-        venue = game.get("venue", "").strip() or "Unknown Venue"
-        start = game.get("start", "Unknown")
-        end = game.get("end", "Unknown")
-        players = game.get("players", "0/0")
-        host = game.get("host", "Unknown")
-        link = game.get("link", "")
+    for i, game in enumerate(games, start=1):
+        venue = game.get("venue", "").strip()
+        start = game.get("start", "").strip()
+        end = game.get("end", "").strip()
+        players = game.get("players", "0/0").strip()
+        host = game.get("host", "Unknown").strip()
+        link = game.get("link", "").strip()
         distance = game.get("distance", None)
 
-        # Only show games with available slots
+        # Skip full games
         try:
             current, total = map(int, players.split("/"))
             if total <= 0 or current >= total:
-                continue  # full or invalid match
+                continue
         except Exception:
-            continue  # invalid player format
+            continue
 
-        distance_str = f"📍 {round(distance, 1)} km away" if distance else ""
+        lines = []
 
-        match_text = (
-            f"🏟️ *{venue}*\n"
-            f"🕔 {start} – {end}\n"
-            f"👥 {players} | 👤 {host} {distance_str}\n"
-            f"[👉 Join Match]({link})"
-        )
+        # Match title with numbering and optional venue
+        if venue:
+            lines.append(f"{i}. 🏟️ *{venue}*")
+        else:
+            lines.append(f"{i}.")
 
-        messages.append(match_text)
+        # Add start–end time
+        if start and end:
+            lines.append(f"🕔 {start} – {end}")
+
+        # Players
+        lines.append(f"👥 {players}")
+
+        # Host
+        if host:
+            lines.append(f"👤 Host: {host}")
+
+        # Distance
+        if distance:
+            lines.append(f"📍 {round(distance, 1)} km away")
+
+        # Link
+        if link:
+            lines.append(f"[👉 Join Match]({link})")
+
+        match_block = "\n".join(lines)
+        messages.append(match_block)
 
     if not messages:
         return "😔 No open football matches found today between 6PM and 10PM."
