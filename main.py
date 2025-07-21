@@ -14,23 +14,36 @@ from telegram.ext import (
 from dotenv import load_dotenv
 from bot.telegram_helpers import send_welcome_message
 
-# --- Environment setup ---
+# ----------------------------
+# Environment setup
+# ----------------------------
 load_dotenv()
+
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_SECRET_TOKEN = os.getenv("WEBHOOK_SECRET_TOKEN", "supersecret")
 BOT = telegram.Bot(token=BOT_TOKEN)
 
-# --- Logging setup ---
+# ----------------------------
+# Logging for Render Logs
+# ----------------------------
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# --- Flask and Application setup ---
+# ----------------------------
+# Flask and Telegram App Setup
+# ----------------------------
 app = Flask(__name__)
 application: Application = ApplicationBuilder().token(BOT_TOKEN).build()
 
+# Global lock + flag for safe async lazy initialization
+init_lock = asyncio.Lock()
+initialized = False
+
+# ----------------------------
 # Handlers
+# ----------------------------
 application.add_handler(
     MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, send_welcome_message)
 )
@@ -40,10 +53,9 @@ async def handle_test(update: telegram.Update, context: ContextTypes.DEFAULT_TYP
 
 application.add_handler(CommandHandler("test", handle_test))
 
-# Use an Event to track initialization across requests
-_initialized_event = asyncio.Event()
-
-# --- Routes ---
+# ----------------------------
+# Routes
+# ----------------------------
 
 @app.route("/", methods=["GET"])
 def home():
@@ -55,10 +67,12 @@ def health_check():
 
 @app.route(f"/{WEBHOOK_SECRET_TOKEN}", methods=["POST"])
 async def telegram_webhook():
-    if not _initialized_event.is_set():
-        await application.initialize()
-        _initialized_event.set()
-        logger.info("✅ Application initialized (idempotent)")
+    global initialized
+    async with init_lock:
+        if not initialized:
+            await application.initialize()
+            initialized = True
+            logger.info("✅ Application initialized in this process.")
 
     try:
         update = telegram.Update.de_json(request.get_json(force=True), BOT)
@@ -68,11 +82,13 @@ async def telegram_webhook():
         logger.error(f"❌ Error handling update: {e}", exc_info=True)
         return "Error", 500
 
+# ----------------------------
+# Run with Hypercorn (Render)
+# ----------------------------
 if __name__ == "__main__":
+    logger.info("🚀 Starting with Hypercorn production ASGI server...")
     import hypercorn.asyncio
     import hypercorn.config
     config = hypercorn.config.Config()
     config.bind = ["0.0.0.0:10000"]
-    logger.info("🚀 Starting with Hypercorn production ASGI server...")
     asyncio.run(hypercorn.asyncio.serve(app, config))
-
