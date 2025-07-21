@@ -69,5 +69,10 @@ async def telegram_webhook():
         return "Error", 500
 
 if __name__ == "__main__":
-    logger.info("🚀 Starting Telegram Bot webhook server...")
-    app.run(host="0.0.0.0", port=10000)
+    import hypercorn.asyncio
+    import hypercorn.config
+    config = hypercorn.config.Config()
+    config.bind = ["0.0.0.0:10000"]
+    logger.info("🚀 Starting with Hypercorn production ASGI server...")
+    asyncio.run(hypercorn.asyncio.serve(app, config))
+
