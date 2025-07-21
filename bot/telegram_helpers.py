@@ -26,7 +26,7 @@ async def send_welcome_message(update: Update, context: ContextTypes.DEFAULT_TYP
             "➖➖➖\n"
             "🤖 This bot runs on free cloud ☁️\n"
             "😴 If no matches show up, it’s not the bot’s fault — Playo’s just quiet.\n"
-            "☕ Want more consistency? [Buy me a coffee](https://buymeacoffee.com/talkanoop8y/how-bot-working-far)!"
+            
         )
 
         try:
