@@ -10,7 +10,7 @@ from telegram.ext import (
 )
 
 from bot.telegram_helpers import send_welcome_message
-from bot.daily_task_runner import run_daily_update
+from daily_task import run_daily_update
 
 load_dotenv()
 
